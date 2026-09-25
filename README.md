@@ -13,76 +13,53 @@ older side-by-side column layout. There's currently no disruption ticker
 
 ---
 
-## Before you start: the HDMI problem
+## 1. Prepare the Pi
 
-Your Pi is currently configured for the 3.5" SPI touchscreen from the flight
-tracker. The `goodtft/LCD-show` installer that set that up **rewrites the boot
-config and disables normal HDMI output**. So if you just plug in an HDMI
-monitor now, you will most likely get no picture — that's the config, not a
-broken cable.
+Flash **Raspberry Pi OS Lite** with Raspberry Pi Imager — use the gear icon to
+set a username, password, hostname and enable SSH. Pick *Lite*, not the
+desktop image: a desktop session holds the display and pygame then silently
+falls back to an invisible "offscreen" driver. (Already on the desktop image?
+`sudo systemctl set-default multi-user.target` and reboot to get a plain
+console instead.)
 
-**Step 0 is therefore to switch the Pi back to HDMI.** See step 1 below.
-
-The old flight tracker itself is harmless: nothing autostarts, no systemd
-service is enabled, so you can leave `~/flighttracker` exactly where it is.
-It costs nothing but a few MB of disk.
-
----
-
-## 1. Switch the Pi back to HDMI output
-
-SSH in:
+Plug the HDMI monitor in **before** booting — the Pi only detects HDMI at
+boot. Then SSH in:
 
 ```bash
 ssh <user>@<pi-address>
 ```
 
-(`<user>` is the account you created when flashing the card, `<pi-address>`
-its hostname or IP on your network.)
+(`<user>` is the account you set in Imager, `<pi-address>` the Pi's hostname
+or IP on your network.)
 
-If you still have the LCD-show folder (you probably do, that's how the screen
-was installed), it ships a script that reverses itself:
-
-```bash
-cd ~/LCD-show
-sudo ./LCD-hdmi
-```
-
-That reboots the Pi on its own. Plug the HDMI monitor in **before** it comes
-back up — the Pi only detects HDMI at boot.
-
-**If you don't have `~/LCD-show` any more**, edit the boot config by hand:
+Check that KMS is active:
 
 ```bash
-sudo nano /boot/firmware/config.txt      # on older Raspberry Pi OS: /boot/config.txt
-```
-
-- Put a `#` in front of any line mentioning `tft35a`, `piscreen`, `ads7846`,
-  or `dtoverlay=...rotate=90`
-- Make sure this line is present and **not** commented out:
-  `dtoverlay=vc4-kms-v3d`
-
-Then `sudo reboot`.
-
-After the reboot, check that the Pi really sees an HDMI framebuffer:
-
-```bash
-ls /dev/fb*          # expect /dev/fb0
-ls /dev/dri/         # expect card0 (and card1) — this means KMS is active
+ls /dev/dri/         # expect card0 (and card1)
 cat /sys/class/graphics/fb0/virtual_size    # e.g. 1920,1080
 ```
 
-If `/dev/dri/` is empty, KMS didn't load — recheck `config.txt`.
+If `/dev/dri/` is empty, make sure `dtoverlay=vc4-kms-v3d` is present and not
+commented out in `/boot/firmware/config.txt`, then reboot.
 
 ---
 
 ## 2. Copy the project to the Pi
 
-From your computer, in the folder containing `wldeparture`:
+Either clone it straight onto the Pi:
 
 ```bash
-scp -r wldeparture <user>@<pi-address>:~/
+git clone <this-repo-url> ~/wldeparture
 ```
+
+or copy it over from your computer:
+
+```bash
+scp -r <local-folder> <user>@<pi-address>:~/wldeparture
+```
+
+The rest of this README (and `wldeparture.service`) assumes it lives in
+`~/wldeparture`.
 
 ---
 
@@ -96,9 +73,6 @@ sudo apt install -y python3-pygame python3-numpy python3-requests
 
 Use **apt, not pip** for these. On a 512MB Pi 3A+, pip would try to compile
 numpy and pygame from source and will run out of memory.
-
-`python3-pygame` and `python3-numpy` are already installed from the flight
-tracker, so this will be quick.
 
 Give your user access to the graphics devices (needed for fullscreen output
 without a desktop):
@@ -122,40 +96,41 @@ python3 find_stops.py Pilgramgasse
 ```
 
 This downloads a few open-data CSV files (cached afterwards) and prints a
-table like:
+table of every stopId at the station and the lines serving it, e.g.:
 
 ```
-   4212   U4                     Pilgramgasse  H1
-   4213   U4                     Pilgramgasse  H2
-   1856   13A, 14A, 59A          Pilgramgasse  ...
+      669   13A, N71               Pilgramgasse  (...)
+      699   13A, 14A               Pilgramgasse  (...)
+      751   14A                    Pilgramgasse  (...)
+     4417   U4                     Pilgramgasse  (...)
+     4420   U4                     Pilgramgasse  (...)
 ```
 
 To see **which direction** each number serves, query one live:
 
 ```bash
-python3 wl_client.py 4212
+python3 wl_client.py 4417
 ```
 
-It prints the line, countdown and destination — that tells you whether 4212
-is the Heiligenstadt or the Hütteldorf platform.
+It prints the line, countdown and destination — that tells you whether 4417
+is the Heiligenstadt or the Hütteldorf platform. Query each stopId on its
+own: a combined query mixes the lines together.
 
 ---
 
 ## 5. Fill in `config.py`
-
-```bash
-nano config.py
-```
 
 Put the numbers you found into `WL_ROWS`. The board draws one row per entry,
 top to bottom — this is the "stacked list" layout, not side-by-side columns:
 
 ```python
 WL_ROWS = [
-    {"title": "U4",  "subtitle": "Heiligenstadt", "stop_ids": [4212]},
-    {"title": "U4",  "subtitle": "Hütteldorf",    "stop_ids": [4213]},
-    {"title": "13A", "subtitle": "Skodagasse",    "stop_ids": [1856]},
-    {"title": "13A", "subtitle": "Hauptbahnhof",  "stop_ids": [1857]},
+    {"title": "U4",  "subtitle": "Heiligenstadt",         "stop_ids": [4417]},
+    {"title": "U4",  "subtitle": "Hütteldorf",            "stop_ids": [4420]},
+    {"title": "13A", "subtitle": "Alser Str./Skodagasse", "stop_ids": [699]},
+    {"title": "13A", "subtitle": "Hauptbahnhof",          "stop_ids": [669]},
+    {"title": "14A", "subtitle": "Neubaugasse",           "stop_ids": [699]},
+    {"title": "14A", "subtitle": "Reumannplatz",          "stop_ids": [751]},
 ]
 ```
 
@@ -167,7 +142,9 @@ This is exactly the situation at Pilgramgasse: stop `699` carries both
 `13A` (→ Alser Straße/Skodagasse) and `14A` (→ Neubaugasse), and the board's
 `main.py` filters by line name so the two rows never mix departures.
 
-Ctrl+O to save, Ctrl+X to exit.
+Tip: edit `config.py` on your computer and `scp` it over rather than editing
+it in `nano` over SSH — arrow keys over a flaky SSH session have corrupted
+it with stray characters before.
 
 ---
 
@@ -177,7 +154,7 @@ Test them in this order; it makes any failure obvious.
 
 ```bash
 # a) Can we reach Wiener Linien and parse the answer?
-python3 wl_client.py 4212 4213
+python3 wl_client.py 4417 4420
 
 # b) Does the ÖBB lookup work?
 python3 oebb_client.py "Wien Meidling" "Wulkaprodersdorf"
@@ -279,9 +256,10 @@ In `config.py`:
 | Setting | Effect |
 |---|---|
 | `INTERNAL_SIZE` | The canvas. `(320, 180)` is the default. `(240, 135)` gives noticeably chunkier pixels but less room for text. |
-| `TICKER_SPEED` | How fast the disruption message scrolls, in board pixels per second. |
+| `WL_STALE_SECONDS` | After how long without a successful Wiener Linien update the header's "LIVE" dot turns amber and says "OFFLINE". Default 90. |
+| `TIMEZONE` | Timezone for every time on the board. `"Europe/Vienna"` — independent of the Pi's system timezone. |
 | `SCANLINES` | Fake CRT scanlines over the whole image. Off by default — try it and see. |
-| `FPS` | 12 by default, because the ticker scrolls and the clock colon blinks. |
+| `FPS` | 2 by default — nothing animates, the fastest change is the clock's seconds, so more just heats the Pi. |
 
 The colour palette and the little vehicle sprites are at the top of
 `renderer.py`, written as text — `#` is a pixel, `+` is a highlight, `.` is
@@ -308,6 +286,13 @@ Check the log: `journalctl -u wldeparture -n 50`. The most common cause is
 SDL having no video device — confirm `/dev/dri/card0` exists (step 1).
 As a fallback, set `DISPLAY_MODE = "fb"` in `config.py`.
 
+**The header says "OFFLINE" in amber**
+The board hasn't had a successful Wiener Linien update for more than
+`WL_STALE_SECONDS`. The countdowns keep ticking from the last data, but
+they're no longer being refreshed. Check the Pi's network and
+`journalctl -u wldeparture -n 50`; it goes back to "LIVE" by itself as soon
+as a refresh succeeds.
+
 **A row is empty / says "keine Abfahrten"**
 That stopId probably isn't serving anything right now (night hours) or the
 number is wrong. Verify with `python3 wl_client.py <id>`.
@@ -320,13 +305,6 @@ working. Set `OEBB_ENABLED = False` in `config.py` to hide the row.
 **Screen blanks / "goes into standby" after a while**
 See step 7 above (`consoleblank=0`). If that's already set and it still
 happens, it's very likely the monitor's own power-saving timer, not the Pi.
-
-**Want to go back to the 3.5" SPI screen**
-`cd ~/LCD-show && sudo ./LCD35-show`, then in `config.py` set
-`FB_DEVICE = "/dev/fb1"`, `DISPLAY_MODE = "fb"` and
-`INTERNAL_SIZE = (240, 160)` — that's exactly half of 480×320, so it still
-scales by a whole number. At that size drop to
-`WL_DEPARTURES_PER_ROW = 2` and trim `WL_ROWS` down to what still fits.
 
 ---
 

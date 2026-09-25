@@ -7,8 +7,11 @@ scaling. That is what makes the pixels chunky and square instead of blurry,
 so every measurement in here is in *board pixels*, not screen pixels.
 
 Layout (see DASHBOARD_LAYOUT.md for the design decision this implements):
-  * one full-width header bar: "NÄCHSTE ABFAHRTEN" left, clock + a static
-    (non-blinking) "LIVE" dot on the right.
+  * one full-width header bar: "NÄCHSTE ABFAHRTEN" left, HH:MM:SS clock + a
+    static (non-blinking) "LIVE" dot on the right. The dot turns amber and
+    reads "OFFLINE" when the Wiener Linien data has stopped refreshing.
+  * ÖBB times are struck through in red when cancelled; a delayed next
+    train gets a small "+N" after its (already delay-adjusted) time.
   * one row per line/direction below it, stacked top to bottom instead of
     side-by-side columns: pictogram -> coloured line badge -> destination
     -> right-aligned countdown (one big next departure + smaller upcoming
@@ -47,6 +50,7 @@ ACCENT = (255, 199, 68)
 HOT = (255, 122, 86)
 WARN = (232, 84, 107)
 LIVE_DOT = (61, 220, 151)    # #3DDC97 — static presence indicator, never blinks
+STALE_DOT = ACCENT           # amber — same dot, data no longer refreshing
 
 LINE_COLORS = {
     "U4":  (46, 139, 87),    # #2E8B57
@@ -193,8 +197,9 @@ class Board:
         return surface
 
     # -- header ---------------------------------------------------------------
-    # Static: no blinking colon, no blinking status dot — just a fixed-colour
-    # presence indicator (DASHBOARD_LAYOUT.md).
+    # Static: no blinking colon, no blinking status dot — just a presence
+    # indicator whose colour reflects whether the data is fresh
+    # (DASHBOARD_LAYOUT.md).
 
     def _header(self, state) -> None:
         surface = self.surface
@@ -204,11 +209,13 @@ class Board:
         pf.draw(surface, pf.fit("NÄCHSTE ABFAHRTEN", label_max_w, tiny=True), self.MARGIN, 5, DIM,
                 tiny=True)
 
-        live_rect = pf.draw(surface, "LIVE", width - self.MARGIN, 5, LIVE_DOT,
-                            tiny=True, align="right")
+        stale = state.wl_is_stale()
+        dot_colour = STALE_DOT if stale else LIVE_DOT
+        live_rect = pf.draw(surface, "OFFLINE" if stale else "LIVE", width - self.MARGIN, 5,
+                            dot_colour, tiny=True, align="right")
         dot_x = live_rect.left - 6
-        pygame.draw.rect(surface, LIVE_DOT, pygame.Rect(dot_x, live_rect.y + 1, 3, 3))
-        pf.draw(surface, state.now.strftime("%H:%M"), dot_x - 5, 4, TEXT,
+        pygame.draw.rect(surface, dot_colour, pygame.Rect(dot_x, live_rect.y + 1, 3, 3))
+        pf.draw(surface, state.now.strftime("%H:%M:%S"), dot_x - 5, 4, TEXT,
                 scale=1, align="right")
 
         dotted_line(surface, self.MARGIN, width - self.MARGIN, self.HEADER_H - 1, BORDER)
@@ -342,12 +349,32 @@ class Board:
             pf.draw(surface, message, rect.right - 2, mid_y, DIMMER, tiny=True, align="right")
             return
 
-        times = [t.departure.strftime("%H:%M") if t.departure else "--:--" for t in trains]
+        def label(train):
+            return train.departure.strftime("%H:%M") if train.departure else "--:--"
 
         x = rect.right - 2
-        for value in reversed(times[1:]):
-            small_rect = pf.draw(surface, value, x, mid_y, DIM, tiny=True, align="right")
+        for train in reversed(trains[1:]):
+            colour = WARN if train.cancelled else (HOT if train.dep_delay > 0 else DIM)
+            small_rect = pf.draw(surface, label(train), x, mid_y, colour, tiny=True,
+                                 align="right")
+            if train.cancelled:
+                self._strike(small_rect, colour)
             x = small_rect.left - 6
 
+        first = trains[0]
         big_y = rect.y + (rect.height - pf.BIG_HEIGHT) // 2
-        pf.draw(surface, times[0], x, big_y, TEXT, scale=1, align="right")
+        if first.dep_delay > 0 and not first.cancelled:
+            # The time shown is already the real (delayed) one; "+N" says by how much.
+            delay_rect = pf.draw(surface, f"+{first.dep_delay}", x, mid_y, HOT,
+                                 tiny=True, align="right")
+            x = delay_rect.left - 2
+        colour = WARN if first.cancelled else TEXT
+        big_rect = pf.draw(surface, label(first), x, big_y, colour, scale=1, align="right")
+        if first.cancelled:
+            self._strike(big_rect, colour)
+
+    def _strike(self, rect: pygame.Rect, colour) -> None:
+        """Strike a cancelled departure through the middle of its glyphs."""
+        # Glyphs carry one blank accent row on top, so shift the line down a pixel.
+        y = rect.y + 1 + (rect.height - 1) // 2
+        pygame.draw.line(self.surface, colour, (rect.left - 1, y), (rect.right, y))

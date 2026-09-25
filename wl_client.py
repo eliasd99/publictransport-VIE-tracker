@@ -15,8 +15,13 @@ from __future__ import annotations
 import datetime as dt
 import re
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
 
 import requests
+
+import config
+
+LOCAL_TZ = ZoneInfo(config.TIMEZONE)
 
 MONITOR_URL = "https://www.wienerlinien.at/ogd_realtime/monitor"
 
@@ -46,7 +51,9 @@ def parse_time(value: str | None) -> dt.datetime | None:
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        parsed = parsed.astimezone()
+        # No offset in the string: it's Vienna local time, whatever the Pi's
+        # own timezone happens to be set to.
+        parsed = parsed.replace(tzinfo=LOCAL_TZ)
     return parsed
 
 
@@ -158,7 +165,7 @@ def fetch(stop_ids, traffic_info: bool = True) -> MonitorResult:
     if message.get("messageCode") not in (1, None):
         return MonitorResult(error=f"API: {message.get('value', 'error')}")
 
-    result = MonitorResult(fetched_at=dt.datetime.now().astimezone())
+    result = MonitorResult(fetched_at=dt.datetime.now(LOCAL_TZ))
 
     for monitor in (payload.get("data") or {}).get("monitors") or []:
         properties = (monitor.get("locationStop") or {}).get("properties") or {}
@@ -203,7 +210,7 @@ if __name__ == "__main__":
     outcome = fetch(sys.argv[1:])
     if outcome.error:
         print("ERROR:", outcome.error)
-    now = dt.datetime.now().astimezone()
+    now = dt.datetime.now(LOCAL_TZ)
     for dep in outcome.departures:
         delay = dep.delay_minutes
         suffix = f"  ({delay:+d} min)" if delay else ""

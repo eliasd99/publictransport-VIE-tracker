@@ -25,8 +25,10 @@ attention-seeking, no blinking").
   what let 7 groups fit in 540px height).
 - Top header bar (full width): "NÄCHSTE ABFAHRTEN" label on the left,
   **current time (`HH:MM:SS`)** + a static "LIVE" status dot on the
-  right — the dot does **not** blink; it's a fixed-color presence
-  indicator. Seconds were added after the first pass at user request.
+  right — the dot does **not** blink. It turns amber and reads "OFFLINE"
+  once the Wiener Linien data is older than `WL_STALE_SECONDS` (90s), so
+  countdowns running on old data are never labelled live. Seconds were
+  added after the first pass at user request.
 - No disruption ticker in this variant (removed per request) — if
   disruptions need to come back, they'd need their own row or a
   re-introduced side panel.
@@ -47,7 +49,9 @@ attention-seeking, no blinking").
   + two smaller upcoming ones + "MIN" suffix.
 - ÖBB row: three **clock times** (e.g. 13:45 → 14:45 → 15:45) instead of a
   countdown — the regional train runs roughly hourly, so actual departure
-  times are more useful than a countdown.
+  times are more useful than a countdown. Times are the real (delay-adjusted)
+  ones; a delayed next train gets a small orange "+N", later delayed trains
+  are drawn orange, and a cancelled train is red and struck through.
 
 ## Typography / sizing / color (implemented values)
 
@@ -72,7 +76,8 @@ attention-seeking, no blinking").
   - 14A: light blue `#3DA5D9` (distinct from 13A so the two buses don't
     blur together)
   - ÖBB: red `#C81E2C`
-- Status dot: static teal-green `#3DDC97`, never blinking.
+- Status dot: static teal-green `#3DDC97` while live, amber `#FFC744` when
+  the data is stale — never blinking.
 
 ## Implementation notes
 

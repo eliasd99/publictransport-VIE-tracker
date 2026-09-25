@@ -46,6 +46,12 @@ WL_DEPARTURES_PER_ROW = 3
 # the countdowns on screen tick down every second on their own.
 WL_REFRESH_SECONDS = 30
 
+# If the last successful Wiener Linien update is older than this, the header's
+# "LIVE" dot turns amber and reads "OFFLINE" — the countdowns keep ticking from
+# the last data, but you can see it's no longer being refreshed. 90s = two
+# missed refreshes in a row.
+WL_STALE_SECONDS = 90
+
 # Ask the API for disruption/Störung text alongside departures. The current
 # "stacked list" layout has no ticker to display it (removed — see
 # DASHBOARD_LAYOUT.md), so this currently only affects how much the API
@@ -70,6 +76,10 @@ OEBB_REFRESH_SECONDS = 120
 # ---------------------------------------------------------------------------
 # Display
 # ---------------------------------------------------------------------------
+# All times on the board (header clock, ÖBB departures) are shown in this
+# timezone, regardless of what the Pi's system clock is set to.
+TIMEZONE = "Europe/Vienna"
+
 # "auto"   – try HDMI via SDL/KMS, then fall back to writing the framebuffer
 # "sdl"    – force a normal SDL window/fullscreen (HDMI)
 # "fb"     – force raw framebuffer writes (set FB_DEVICE below)
@@ -102,8 +112,8 @@ TICKER_SPEED = 14
 # Fake CRT scanlines drawn over the upscaled image.
 SCANLINES = False
 
-# Frames per second. The canvas is tiny, so this stays cheap even though it's
-# higher than you might expect for a mostly-static board.
-FPS = 12
+# Frames per second. Nothing on the board animates any more — the fastest
+# change is the header clock's seconds — so 2 is plenty and keeps the Pi cool.
+FPS = 2
 
 # The colour palette lives at the top of renderer.py, next to the sprites.

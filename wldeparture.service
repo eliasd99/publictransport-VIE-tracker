@@ -4,6 +4,9 @@ Description=Pilgramgasse Wiener Linien / OBB departure board
 # network at startup, it just shows an error row until Wi-Fi comes up, so
 # this must not block or delay the unit from starting.
 After=network.target
+# Never give up restarting, however often it fails (see Restart= below). This
+# has to live in [Unit] — systemd ignores it in [Service].
+StartLimitIntervalSec=0
 
 [Service]
 # Replace YOUR_USER with your Pi username before installing (see README step 8).
@@ -29,14 +32,13 @@ TTYVTDisallocate=yes
 # Keep this running for as long as the Pi has power, full stop: restart on
 # a crash, a hang, an OOM-kill, a bad frame — anything. RestartSec gives a
 # failing process a moment to actually exit before systemd tries again.
-# StartLimitIntervalSec=0 (below) turns off systemd's default "give up
+# StartLimitIntervalSec=0 (in [Unit], above) turns off systemd's default "give up
 # after 5 restarts in 10s" behaviour, so a rough patch (e.g. Wiener Linien
 # or OBB being down) never leaves the service permanently stopped — it
 # just keeps trying, forever, which is what "run as long as it has power"
 # means here.
 Restart=always
 RestartSec=3
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target

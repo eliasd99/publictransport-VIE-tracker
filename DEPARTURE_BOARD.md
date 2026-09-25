@@ -15,7 +15,12 @@ APIs behind it, and the deployment gotchas hit along the way.
   than a countdown
 - No disruption ticker currently (removed in the stacked-list redesign —
   see `DASHBOARD_LAYOUT.md`)
-- Header clock shows `HH:MM:SS`
+- Header clock shows `HH:MM:SS`, always in Vienna time (`config.TIMEZONE`),
+  whatever the Pi's system timezone is
+- The header's "LIVE" dot turns amber / "OFFLINE" when Wiener Linien data
+  stops refreshing (`WL_STALE_SECONDS`)
+- Delayed ÖBB trains are marked orange ("+N" on the next one); cancelled
+  ones are red and struck through
 
 ## Refresh rates
 
@@ -24,6 +29,10 @@ Set in `config.py`:
 - **Wiener Linien**: every **30s** (`WL_REFRESH_SECONDS`)
 - **ÖBB**: every **120s** (`OEBB_REFRESH_SECONDS`) — slower on purpose,
   since it's an unofficial endpoint and trains run roughly hourly anyway
+
+Each worker thread catches every exception around its fetch, so an API
+response with an unexpected shape can't kill the thread (which would freeze
+a row while the process — and so systemd — thought all was well).
 
 On a failed fetch, the worker loop backs off — each consecutive failure
 multiplies the delay (up to 4x), so a struggling API isn't hammered every
@@ -112,7 +121,9 @@ standby":
    a 512MB Pi) would just leave the board off until someone noticed and
    ran `systemctl start` by hand. `wldeparture.service` now sets
    `Restart=always`, `RestartSec=3`, and `StartLimitIntervalSec=0` (so
-   systemd never permanently gives up after repeated failures). Combined
+   systemd never permanently gives up after repeated failures — note this
+   one must sit in `[Unit]`; an earlier version had it under `[Service]`,
+   where systemd silently ignores it). Combined
    with `enable` (already done — `WantedBy=multi-user.target`), pulling
    power and plugging it back in boots straight back to the board with no
    manual step.

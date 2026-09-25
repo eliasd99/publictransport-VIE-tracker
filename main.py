@@ -38,7 +38,7 @@ class State:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self.now = dt.datetime.now().astimezone()
+        self.now = dt.datetime.now(wl_client.LOCAL_TZ)
         self.departures: list = []
         self.disruptions: list[str] = []
         self.wl_error: str | None = "starting…"
@@ -69,9 +69,16 @@ class State:
             self.train_updated = result.fetched_at
 
     def seconds_since_wl_update(self) -> float | None:
-        if self.wl_updated is None:
+        with self._lock:
+            updated = self.wl_updated
+        if updated is None:
             return None
-        return (dt.datetime.now().astimezone() - self.wl_updated).total_seconds()
+        return (self.now - updated).total_seconds()
+
+    def wl_is_stale(self) -> bool:
+        """True before the first good update, or once updates have stopped."""
+        age = self.seconds_since_wl_update()
+        return age is None or age > config.WL_STALE_SECONDS
 
     def departures_for(self, row) -> list:
         """
@@ -122,7 +129,14 @@ def wl_worker(state: State) -> None:
 
     failures = 0
     while not _stop.is_set():
-        result = wl_client.fetch(stop_ids, traffic_info=config.SHOW_DISRUPTIONS)
+        # fetch() handles network errors itself, but an API response with an
+        # unexpected shape could still raise while it's being parsed. Catch
+        # everything here: if this thread died, the board would keep running
+        # (so systemd would never restart it) while the rows silently froze.
+        try:
+            result = wl_client.fetch(stop_ids, traffic_info=config.SHOW_DISRUPTIONS)
+        except Exception as exc:                   # noqa: BLE001
+            result = wl_client.MonitorResult(error=f"internal: {exc.__class__.__name__}")
         state.update_wl(result)
 
         # Back off a little when things are failing, so a network outage
@@ -137,7 +151,11 @@ def train_worker(state: State) -> None:
         return
     failures = 0
     while not _stop.is_set():
-        result = oebb_client.fetch(config.OEBB_FROM, config.OEBB_TO, config.OEBB_RESULTS)
+        # Same reasoning as wl_worker: never let a parsing surprise kill the thread.
+        try:
+            result = oebb_client.fetch(config.OEBB_FROM, config.OEBB_TO, config.OEBB_RESULTS)
+        except Exception as exc:                   # noqa: BLE001
+            result = oebb_client.TrainResult(error=f"internal: {exc.__class__.__name__}")
         state.update_trains(result)
         failures = failures + 1 if result.error else 0
         delay = config.OEBB_REFRESH_SECONDS * min(4, 1 + failures)
@@ -162,7 +180,7 @@ def render_once(path: str) -> int:
     if config.OEBB_ENABLED:
         state.update_trains(oebb_client.fetch(config.OEBB_FROM, config.OEBB_TO,
                                               config.OEBB_RESULTS))
-    state.now = dt.datetime.now().astimezone()
+    state.now = dt.datetime.now(wl_client.LOCAL_TZ)
 
     board = Board(config.INTERNAL_SIZE)
     frame = board.render(state)
@@ -228,7 +246,7 @@ def main() -> int:
                 ):
                     _stop.set()
 
-            state.now = dt.datetime.now().astimezone()
+            state.now = dt.datetime.now(wl_client.LOCAL_TZ)
             display.show(board.render(state))
             clock.tick(config.FPS)
     finally:

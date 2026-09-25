@@ -22,8 +22,13 @@ from __future__ import annotations
 
 import datetime as dt
 from dataclasses import dataclass, field
+from zoneinfo import ZoneInfo
 
 import requests
+
+import config
+
+LOCAL_TZ = ZoneInfo(config.TIMEZONE)
 
 ENDPOINT = "https://fahrplan.oebb.at/bin/mgate.exe"
 
@@ -143,11 +148,9 @@ def _parse_hafas_time(date_str: str, time_str: str | None) -> dt.datetime | None
     except ValueError:
         return None
 
-    # HAFAS returns local Vienna time without an offset; attach the system's
-    # timezone, which on the Pi should be Europe/Vienna.
-    return moment.astimezone() if moment.tzinfo else moment.replace(
-        tzinfo=dt.datetime.now().astimezone().tzinfo
-    )
+    # HAFAS returns local Vienna time without an offset. Attach Vienna
+    # explicitly rather than the Pi's system timezone, which may be UTC.
+    return moment.replace(tzinfo=LOCAL_TZ)
 
 
 def fetch(origin: str, destination: str, results: int = 3) -> TrainResult:
@@ -158,7 +161,7 @@ def fetch(origin: str, destination: str, results: int = 3) -> TrainResult:
         from_lid = resolve_station(origin)
         to_lid = resolve_station(destination)
 
-        now = dt.datetime.now()
+        now = dt.datetime.now(LOCAL_TZ)
         res = _request(
             "TripSearch",
             {
@@ -179,7 +182,7 @@ def fetch(origin: str, destination: str, results: int = 3) -> TrainResult:
     # Product names live in a shared lookup table referenced by index.
     products = res.get("common", {}).get("prodL") or []
 
-    outcome = TrainResult(fetched_at=dt.datetime.now().astimezone())
+    outcome = TrainResult(fetched_at=dt.datetime.now(LOCAL_TZ))
 
     for connection in (res.get("outConL") or [])[:results]:
         date = connection.get("date") or ""
