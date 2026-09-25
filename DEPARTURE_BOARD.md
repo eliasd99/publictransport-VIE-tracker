@@ -98,8 +98,7 @@ confirmed live so far).
   the board keeps showing the last good data.
 - `display.py` auto-detects output: SDL/KMS first (HDMI), falling back to
   raw framebuffer writes. Confirmed picking KMS/DRM directly once
-  `getty@tty1` was disabled (see **Lessons learned**) — no offscreen
-  fallback.
+  `getty@tty1` was disabled (README step 8) — no offscreen fallback.
 - Pixel-art rendering (canvas size, bitmap fonts, upscaling), the row
   layout, and the colour palette are all covered in `DASHBOARD_LAYOUT.md`
   rather than duplicated here.
@@ -127,52 +126,6 @@ standby":
    with `enable` (already done — `WantedBy=multi-user.target`), pulling
    power and plugging it back in boots straight back to the board with no
    manual step.
-
-## Lessons learned (worth reading before repeating any of this)
-
-1. **The Pi's SSH password was lost.** A first-boot recovery script
-   (`systemd.run=` kernel-command-line hook) failed twice — once because
-   the script was never actually copied to the boot partition (silent
-   no-op), once causing a genuine reboot loop. **Reflashing the card with
-   Raspberry Pi Imager** (credentials via the gear icon) was faster and
-   safer than debugging a headless boot-time hook blind with no keyboard
-   attached. Prefer that path again if this happens.
-2. **The reflash defaulted to Raspberry Pi OS with Desktop, not Lite.**
-   Not obvious until pygame's SDL fell back to an invisible "offscreen"
-   driver — the desktop compositor was holding the display. Fix:
-   `sudo systemctl set-default multi-user.target` to boot to a plain
-   console. Flash Lite from the start next time to skip this.
-3. **Editing files in `nano` over SSH can be unreliable** — arrow-key
-   navigation once corrupted `config.py` with garbage characters. For
-   config with known-good values, generate the file locally and `scp` it
-   over instead of live-editing in nano.
-4. `ssh-copy-id` must be run **from your own computer**, not from inside a shell
-   already on the Pi.
-5. **`ssh host 'sudo ...'` fails** with "a terminal is required to read
-   the password" unless a pseudo-terminal is forced with `ssh -t` — a
-   plain non-interactive SSH command has no TTY for sudo to prompt on.
-6. **`wldeparture.service` originally had `User=pi` and
-   `WorkingDirectory=/home/pi/wldeparture`**, left over from a template —
-   the real user was different. The unit now ships with a `YOUR_USER`
-   placeholder that's filled in with `sed` before installing (README step 8); worth checking any future unit file against the real
-   username before `cp`-ing it into `/etc/systemd/system/`.
-7. **`ExecStartPre=/bin/sleep 5` hung for the full 90s systemd default
-   timeout** on first install (unit stuck in `activating (start-pre)`).
-   Cause: the unit claims `/dev/tty1` directly (`TTYPath=/dev/tty1`,
-   `StandardInput=tty`), and `getty@tty1` was still enabled and holding
-   that console, so opening it blocked indefinitely. Fixed with
-   `sudo systemctl disable --now getty@tty1` (this is step 8 in
-   `README.md`, easy to miss on a first install). Once disabled, the unit
-   started clean and SDL picked KMS/DRM immediately. The current unit
-   drops the `ExecStartPre=/bin/sleep 5` entirely rather than relying on
-   the sleep to dodge this.
-8. An `XDG_RUNTIME_DIR is invalid or not set` line from SDL on startup is
-   harmless in this setup (no desktop session, running from a systemd unit
-   on tty1) — it's immediately followed by a successful
-   `Display: SDL (KMSDRM) ...` line, so it doesn't need chasing.
-9. **The service had no `Restart=` directive**, so a crash just left the
-   board dark until someone manually restarted it — see "Keeping it
-   running" above.
 
 ## Open items
 

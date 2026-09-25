@@ -19,8 +19,7 @@ ExecStart=/usr/bin/python3 /home/YOUR_USER/wldeparture/main.py
 # The board owns the console directly (SDL talks to KMS/DRM on tty1) —
 # no desktop session involved. Requires getty@tty1 to be disabled
 # (sudo systemctl disable --now getty@tty1), otherwise this hangs at
-# start-pre waiting for a console that's already held — see
-# DEPARTURE_BOARD.md "Lessons learned" #7.
+# start waiting for a console that's already held — see README step 8.
 TTYPath=/dev/tty1
 StandardInput=tty
 StandardOutput=journal
