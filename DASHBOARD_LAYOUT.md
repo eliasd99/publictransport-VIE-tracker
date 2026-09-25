@@ -4,17 +4,6 @@
 the HDMI monitor at 1920×1080 via `wldeparture.service` — deployment
 gotchas are in `DEPARTURE_BOARD.md`, not here.
 
-## Design exploration
-
-Three layout variants were mocked up; "B — Stacked List" is the one
-picked.
-
-## Why a redesign
-
-The original 4-column pixel-art layout worked but was flagged as hard to
-read, and the blinking clock colon was unwanted ("informative but not
-attention-seeking, no blinking").
-
 ## Chosen layout: single full-width list
 
 - One vertical list, one row per line/direction, instead of 4 side-by-side
