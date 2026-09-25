@@ -1,0 +1,10 @@
+# Install these with apt, NOT pip — on a 512MB Pi 3A+ building numpy or
+# pygame from source will either take an hour or run out of memory:
+#
+#   sudo apt update
+#   sudo apt install -y python3-pygame python3-numpy python3-requests
+#
+# This file is here for reference / for running the board on a normal machine.
+pygame>=2.1
+numpy>=1.20
+requests>=2.25

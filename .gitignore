@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+ogd_cache/
+*.png
+.DS_Store

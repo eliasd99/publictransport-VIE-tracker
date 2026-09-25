@@ -1,0 +1,42 @@
+[Unit]
+Description=Pilgramgasse Wiener Linien / OBB departure board
+# Ordering only (not a hard dependency) — the board copes fine without
+# network at startup, it just shows an error row until Wi-Fi comes up, so
+# this must not block or delay the unit from starting.
+After=network.target
+
+[Service]
+# Replace YOUR_USER with your Pi username before installing (see README step 8).
+Type=simple
+User=YOUR_USER
+Group=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/wldeparture
+ExecStart=/usr/bin/python3 /home/YOUR_USER/wldeparture/main.py
+
+# The board owns the console directly (SDL talks to KMS/DRM on tty1) —
+# no desktop session involved. Requires getty@tty1 to be disabled
+# (sudo systemctl disable --now getty@tty1), otherwise this hangs at
+# start-pre waiting for a console that's already held — see
+# DEPARTURE_BOARD.md "Lessons learned" #7.
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+# Keep this running for as long as the Pi has power, full stop: restart on
+# a crash, a hang, an OOM-kill, a bad frame — anything. RestartSec gives a
+# failing process a moment to actually exit before systemd tries again.
+# StartLimitIntervalSec=0 (below) turns off systemd's default "give up
+# after 5 restarts in 10s" behaviour, so a rough patch (e.g. Wiener Linien
+# or OBB being down) never leaves the service permanently stopped — it
+# just keeps trying, forever, which is what "run as long as it has power"
+# means here.
+Restart=always
+RestartSec=3
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target
